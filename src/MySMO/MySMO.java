@@ -55,6 +55,8 @@ public class MySMO {
 	 */
 	private double[][] dotDache = null;
 	
+	private double[][] kernel = null;
+	
 	/**
 	 * 所有向量的数目
 	 */
@@ -69,6 +71,7 @@ public class MySMO {
 		this.alpha = new double[N];
 		this.errorCache = new double[N];
 		this.dotDache = new double[N][N];
+		this.kernel = new double[N][N];
 		this.random = new Random();
 		this.init();
 	}
@@ -78,6 +81,13 @@ public class MySMO {
 		for (int i = 0; i < N; i++) {
 			for (int j = 0; j < N; j++) {
 				this.dotDache[i][j] = dot(x[i], x[j]);
+			}
+		}
+		
+		//初始化kernel
+		for (int i = 0; i < N; i++) {
+			for (int j = 0; j < N; j++) {
+				this.kernel[i][j] = kernelFunction(i, j);
 			}
 		}
 	}
@@ -97,17 +107,9 @@ public class MySMO {
 		double a1, a2; //新的a
 		double L, H;
 		
-		if (0 < alpha1 && alpha1 < C) {
-			E1 = errorCache[i1];
-		}else{
-			E1 = learnFunc(i1) - y1;
-		}
 		
-		if (0 < alpha2 && alpha2 < C) {
-			E2 = errorCache[i2];
-		}else{
-			E2 = learnFunc(i2) - y2;
-		}
+		E1 = calcError(i1);
+		E2 = errorCache[i2];
 		
 		if (y1 != y2) {
 			L = Math.max(0, alpha2 - alpha1);
@@ -120,90 +122,87 @@ public class MySMO {
 			return false;
 		}
 		
-		double k11 = kernel(i1, i1);
-		double k12 = kernel(i1, i2);
-		double k22 = kernel(i2, i2);
+		double k11 = kernel[i1][i1];
+		double k12 = kernel[i1][i2];
+		double k22 = kernel[i2][i2];
 		
 		double eta = 2 * k12 - k11 - k22;
-		//根据不同情况计算出a2
-		if (eta < 0) {
-			//计算非约束条件下的最大值
-			a2 = alpha2 - y2 * (E1 - E2) / eta;
-			
-			//判断约束的条件
-			if (a2 < L) {
-				a2 = L;
-			} else if (a2 > H) {
-				a2 = H;
-			}
-		}else {
-			double C1 = eta / 2;
-			double C2 = y2 * (E1 - E2) - eta * alpha2; 
-			
-			//Lobj和Hobj可以根据自己的爱好选择不同的函数
-			double Lobj = C1 * L * L + C2 * L;
-			double Hobj = C1 * H * H + C2 * H;
-			
-			if (Lobj > Hobj + eps) {
-				a2 = L;
-			}else if (Lobj < Hobj - eps) {
-				a2 = H;
-			} else {
-				a2 = alpha2;
-			}
+		if (eta >=0) {
+			return false;
 		}
 		
+		//计算非约束条件下的最大值
+		a2 = alpha2 - y2 * (E1 - E2) / eta;
+		
+				
+		//判断约束的条件
+		if (a2 < L) {
+			a2 = L;
+		} else if (a2 > H) {
+			a2 = H;
+		}
+		
+		//根据不同情况计算出a2
+//		if (eta < 0) {
+//			//计算非约束条件下的最大值
+//			a2 = alpha2 - y2 * (E1 - E2) / eta;
+//			
+//			//判断约束的条件
+//			if (a2 < L) {
+//				a2 = L;
+//			} else if (a2 > H) {
+//				a2 = H;
+//			}
+//		}else {
+//			double C1 = eta / 2;
+//			double C2 = y2 * (E1 - E2) - eta * alpha2; 
+//			
+//			//Lobj和Hobj可以根据自己的爱好选择不同的函数
+//			double Lobj = C1 * L * L + C2 * L;
+//			double Hobj = C1 * H * H + C2 * H;
+//			
+//			if (Lobj > Hobj + eps) {
+//				a2 = L;
+//			}else if (Lobj < Hobj - eps) {
+//				a2 = H;
+//			} else {
+//				a2 = alpha2;
+//			}
+//		}
+		
 		if (Math.abs(a2 - alpha2) < eps * (a2 + alpha2 + eps)) {
+			updateErrorCache(i2);
 			return false;
 		}
 		
 		//通过a2来更新a1
 		a1 = alpha1 + s * (alpha2 - a2);
 		
-		if (a1 < 0) {
-			a2 += s * a1;
-			a1 = 0;
-		}else if (a1 > C) {
-			a2 += s * (a1 - C);
-			a1 = C;
-		}
+//		if (a1 < 0) {
+//			a2 += s * a1;
+//			a1 = 0;
+//		}else if (a1 > C) {
+//			a2 += s * (a1 - C);
+//			a1 = C;
+//		}
 		
 		//update threshold b;
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
-		//the other way to update b
-//		double b1 = b + E1 + y1 * (a1 - alpha1) * k11 + y2 * (a2 - alpha2) * k12;
-//		double b2 = b + E2 + y1 * (a1 - alpha1) * k12 + y2 * (a2 - alpha2) * k22;
-		
 		double bNew = 0;
-		double deltaB = 0;
 		if (0 < a1 && a1 < C) {
 			bNew = b1;
 		}else if (0 < a2 && a2 < C) {
 			bNew = b2;
 		}else {
-			bNew = (b1 + b2) / 2;
+			bNew = (b1 + b2) / 2.0;
 		}
-		deltaB = bNew - this.b; //b的增量
+		this.b = bNew;
 		
-		//update error cache
-		double t1 = y1 * (a1 - alpha1);
-		double t2 = y2 * (a2 - alpha2);
 		
-		//update error cache using new lagrange multipliers
-		for (int i = 0; i < N; i++) {
-			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
-				errorCache[i] += t1 * kernel(i1, i) + t2 * kernel(i2, i) - deltaB;
-			}
-		}
-		
-//		//update error cache for i1 and i2
-//		errorCache[i1] += t1 * k11 + t2 * k12;
-//		errorCache[i2] += t1 * k12 + t2 * k22;
-		
-		errorCache[i1] = 0.0;
-		errorCache[i2] = 0.0;
+		updateErrorCache(i1);
+		updateErrorCache(i2);
 		
 		//store a1, a2 in alpha array
 		alpha[i1] = a1;
@@ -223,11 +222,8 @@ public class MySMO {
 		double alpha1 = alpha[i1];
 		double E1 = 0;
 		
-		if (0 < alpha1 && alpha1 < C) {
-			E1 = errorCache[i1];
-		}else{
-			E1 = learnFunc(i1) - y1;
-		}
+		E1 = learnFunc(i1) - y1;
+		errorCache[i1] = E1;
 		
 		double r1 = y1 * E1;
 		if ((r1 < -tolerance && alpha1 < C) || (r1 > tolerance && alpha1 > 0)) {
@@ -269,7 +265,7 @@ public class MySMO {
 	private void train(){
 		System.out.println("begin train");
 		
-		int maxIter = 50;
+		int maxIter = 10000000;
 		int iterCount = 0;
 		int numChanged = 0;
 		boolean examineAll = true;
@@ -304,6 +300,15 @@ public class MySMO {
 		System.out.println("end of train");
 	}
 	
+	private double calcError(int k){
+		double result = learnFunc(k) - y[k];
+		return result;
+	}
+	
+	private void updateErrorCache(int k){
+		double error = learnFunc(k) - y[k];
+		this.errorCache[k] = error;
+	}
 	
 	/**
 	 * 找到|E1 - E2|差最大的点的下标
@@ -346,7 +351,7 @@ public class MySMO {
 	 * @param i2
 	 * @return
 	 */
-	private double kernel(int i1, int i2){
+	private double kernelFunction(int i1, int i2){
 		double result = 0.0;
 		result = Math.exp(-gamma * (dotDache[i1][i1] + dotDache[i2][i2] - 2 * dotDache[i1][i2]));
 		
@@ -390,7 +395,7 @@ public class MySMO {
 	private double learnFunc(int k){
 		double sum = 0.0;
 		for (int i = 0; i < N; i++) {
-			sum += alpha[i]*y[i]*kernel(i, k);
+			sum += alpha[i]*y[i]*kernel[i][k];
 		}
 		sum += this.b;
 		return sum;

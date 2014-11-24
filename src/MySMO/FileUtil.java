@@ -36,7 +36,7 @@ public class FileUtil {
 				//选50个做测试
 				count ++;
 				if(count >= 50){
-					break;
+//					break;
 				}
 			}
 			reader.close();
