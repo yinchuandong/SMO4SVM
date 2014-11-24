@@ -2,20 +2,20 @@ package MySMO;
 
 public class SvmNode {
 
-	private int id;
+	private int index;
 	private double value;
 	
-	public SvmNode(int id, double value){
-		this.id = id;
+	public SvmNode(int index, double value){
+		this.index = index;
 		this.value = value;
 	}
 
-	public int getId() {
-		return id;
+	public int getIndex() {
+		return index;
 	}
 
-	public void setId(int id) {
-		this.id = id;
+	public void setIndex(int index) {
+		this.index = index;
 	}
 
 	public double getValue() {
@@ -25,6 +25,6 @@ public class SvmNode {
 	public void setValue(double value) {
 		this.value = value;
 	}
-	
+
 	
 }

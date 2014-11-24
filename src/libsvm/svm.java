@@ -237,6 +237,13 @@ abstract class Kernel extends QMatrix {
 		return sum;
 	}
 
+	/**
+	 * 预测时的核函数，注意RBF和训练时不一样
+	 * @param x
+	 * @param y
+	 * @param param
+	 * @return
+	 */
 	static double k_function(svm_node[] x, svm_node[] y,
 					svm_parameter param)
 	{

@@ -1,6 +1,6 @@
 package MySMO;
 
-import java.util.ArrayList;
+import java.util.Random;
 
 public class MySMO {
 	
@@ -45,19 +45,45 @@ public class MySMO {
 	 */
 	private double b = 0.0;
 	
+	/**
+	 * rbf kernel for exp(-gamma*|u-v|^2), 默认为0.5，也可设为1/num
+	 */
+	private double gamma = 0.5;
+	
+	/**
+	 * 对points点积的缓存
+	 */
+	private double[][] dotDache = null;
+	
+	/**
+	 * 所有向量的数目
+	 */
+	private int N = 0;
+	
+	private Random random = null;
+	
 	public MySMO(SvmNode[][] points, int[] target){
 		this.points = points;
 		this.target = target;
-		this.alpha = new double[points.length];
-		this.errorCache = new double[points.length];
+		this.N = points.length;
+		this.alpha = new double[N];
+		this.errorCache = new double[N];
+		this.dotDache = new double[N][N];
+		this.random = new Random();
 		this.init();
 	}
 	
 	private void init(){
+		//初始化点积dotCache
+		for (int i = 0; i < N; i++) {
+			for (int j = 0; j < N; j++) {
+				this.dotDache[i][j] = dot(points[i], points[j]);
+			}
+		}
 	}
 	
 	private boolean takeStep(int i1, int i2){
-		if (i1 != i2) {
+		if (i1 == i2) {
 			return false;
 		}
 		
@@ -147,8 +173,8 @@ public class MySMO {
 		double t2 = y2 * (a2 - alpha2);
 		
 		//update error cache using new lagrange multipliers
-		for (int i = 0; i < points.length; i++) {
-			if (i != i1 && i  != i2) {
+		for (int i = 0; i < N; i++) {
+			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
 				errorCache[i] += t1 * kernel(i1, i) + t2 * kernel(i2, i);
 			}
 		}
@@ -157,17 +183,169 @@ public class MySMO {
 		errorCache[i1] += t1 * k11 + t2 * k12;
 		errorCache[i2] += t1 * k12 + t2 * k22;
 		
-		return false;
-	}
-	
-	private boolean examineExample(int i2){
+		//store a1, a2 in alpha array
+		alpha[i1] = a1;
+		alpha[i2] = a2;
+		
 		
 		return false;
 	}
 	
+	/**
+	 * 检查最好的样本，并进行takeStep计算
+	 * @param i1
+	 * @return
+	 */
+	private boolean examineExample(int i1){
+		double y1 = target[i1];
+		double E1 = errorCache[i1];
+		double alpha1 = alpha[i1];
+		
+		double r2 = y1 * E1;
+		
+		if ((r2 < -tolerance && alpha1 < C) || (r2 > 0 && alpha1 > 0)) {
+
+			//选择 E1 - E2 差最大的两点
+			int i2 = this.findMax(E1);
+			if (i2 >= 0) {
+				if (takeStep(i1, i2)) {
+					return true;
+				}
+			}
+			
+			//先选择 0 < alpha < C的点
+			int k0 = randomSelect(i1);
+			for (int k = k0; k < N + k0; k++) {
+				i2 = k % N;
+				if (0 < alpha[i2] && alpha[i2] < C) {
+					if (takeStep(i1, i2)) {
+						return true;
+					}
+				}
+			}
+			
+			//如果不符合，再遍历全部点
+			k0 = randomSelect(i1);
+			for (int k = k0; k < N + k0; k++) {
+				i2 = k % N;
+				if (takeStep(i1, i2)) {
+					return true;
+				}
+			}
+			
+		}
+		
+		return false;
+	}
+	
+	
+	private void train(){
+		int numChanged = 0;
+		boolean examineAll = true;
+		
+		while(numChanged > 0 || examineAll){
+			numChanged = 0;
+			
+			if (examineAll) {
+				for (int i = 0; i < N; i++) {
+					if (examineExample(i)) {
+						numChanged ++;
+					}
+				}
+			}else{
+				for (int i = 0; i < N; i++) {
+					if (alpha[i] != 0 && alpha[i] != C) {
+						if (examineExample(i)) {
+							numChanged ++;
+						}
+					}
+				}
+			}
+			
+			if (examineAll) {
+				examineAll = false;
+			}else if (numChanged == 0) {
+				examineAll = true;
+			}
+		}
+	}
+	
+	
+	/**
+	 * 找到|E1 - E2|差最大的点的下标
+	 * @param E1
+	 * @return
+	 */
+	private int findMax(double E1){
+		int i2 = -1;
+		double tmax = 0.0;
+		for (int k = 0; k < N; k++) {
+			if (0 < alpha[k] && alpha[k] < C) {
+				double E2 = errorCache[k];
+				double tmp = Math.abs(E2 - E1);
+				if (tmp > tmax) {
+					tmax = tmp;
+					i2 = k;
+				}
+			}
+		}
+		
+		return i2;
+	}
+	
+	/**
+	 * 随机选择i2，但要求i1 != i2
+	 * @param i1
+	 * @return
+	 */
+	private int randomSelect(int i1){
+		int i2 = 0;
+		do {
+			i2 = random.nextInt(N);
+		} while (i1 != i2);
+		return i2;
+	}
+	
+	/**
+	 * 核函数 exp(-gamma*|u-v|^2)
+	 * @param i1
+	 * @param i2
+	 * @return
+	 */
 	private double kernel(int i1, int i2){
+		double result = 0.0;
+		result = Math.exp(-gamma * (dotDache[i1][i1]) + dotDache[i2][i2] - 2 * dotDache[i1][i2]);
 		
-		return 0.00;
+		return result;
+	}
+	
+	/**
+	 * 对两个向量进行点积，需要x,y向量都按照index升序排序
+	 * @param x
+	 * @param y
+	 * @return
+	 */
+	private double dot(SvmNode[] x, SvmNode[] y){
+		double sum = 0.0;
+		int xLen = x.length;
+		int yLen = y.length;
+		int i = 0;
+		int j = 0;
+		
+		while(i < xLen && j < yLen){
+			if (x[i].getIndex() == y[j].getIndex()) {
+				sum += x[i].getValue() * y[j].getValue();
+				i++;
+				j++;
+			}else{
+				if (x[i].getIndex() > y[j].getIndex()) {
+					j++;
+				}else{
+					i++;
+				}
+			}
+		}
+		return sum;
 	}
 	
 	public static void main(String[] args){
