@@ -16,6 +16,7 @@ public class FileUtil {
 			BufferedReader reader = new BufferedReader(new FileReader(new File(path)));
 			ArrayList<SvmDataLine> dataList = new ArrayList<SvmDataLine>();
 			
+			int count = 0;
 			String buff = null;
 			while((buff = reader.readLine()) != null){
 				String[] arr = buff.split(" ");
@@ -31,6 +32,12 @@ public class FileUtil {
 				SvmNode[] xLine = nodeList.toArray(new SvmNode[]{});
 				SvmDataLine dataLine = new SvmDataLine(xLine, yLine);
 				dataList.add(dataLine);
+				
+				//选50个做测试
+				count ++;
+				if(count >= 50){
+					break;
+				}
 			}
 			reader.close();
 			

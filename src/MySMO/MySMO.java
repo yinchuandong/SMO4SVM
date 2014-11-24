@@ -22,13 +22,13 @@ public class MySMO {
 	/**
 	 * 训练集的已知类别号，即公式中的y[]
 	 */
-	private int[] target = null;
+	private int[] y = null;
 	
 	/**
 	 * 训练集的特征向量点,即公式中的x[] <br/>
 	 * 一行表示一个特征向量，所有行组成训练集的所有特征向量
 	 */
-	private SvmNode[][] points = null;
+	private SvmNode[][] x = null;
 	
 	/**
 	 * 误差缓存
@@ -62,10 +62,10 @@ public class MySMO {
 	
 	private Random random = null;
 	
-	public MySMO(SvmNode[][] points, int[] target){
-		this.points = points;
-		this.target = target;
-		this.N = points.length;
+	public MySMO(SvmNode[][] x, int[] y){
+		this.x = x;
+		this.y = y;
+		this.N = x.length;
 		this.alpha = new double[N];
 		this.errorCache = new double[N];
 		this.dotDache = new double[N][N];
@@ -77,7 +77,7 @@ public class MySMO {
 		//初始化点积dotCache
 		for (int i = 0; i < N; i++) {
 			for (int j = 0; j < N; j++) {
-				this.dotDache[i][j] = dot(points[i], points[j]);
+				this.dotDache[i][j] = dot(x[i], x[j]);
 			}
 		}
 	}
@@ -89,20 +89,32 @@ public class MySMO {
 		
 		double alpha1 = alpha[i1];
 		double alpha2 = alpha[i2];
-		double y1 = target[i1];
-		double y2 = target[i2];
-		double E1 = errorCache[i1];
-		double E2 = errorCache[i2];
+		double y1 = y[i1];
+		double y2 = y[i2];
+		double E1 = 0;
+		double E2 = 0;
 		double s = y1 * y2;
 		double a1, a2; //新的a
 		double L, H;
 		
+		if (0 < alpha1 && alpha1 < C) {
+			E1 = errorCache[i1];
+		}else{
+			E1 = learnFunc(i1) - y1;
+		}
+		
+		if (0 < alpha2 && alpha2 < C) {
+			E2 = errorCache[i2];
+		}else{
+			E2 = learnFunc(i2) - y2;
+		}
+		
 		if (y1 != y2) {
 			L = Math.max(0, alpha2 - alpha1);
-			H = Math.max(C, C + alpha2 - alpha1);
+			H = Math.min(C, C + alpha2 - alpha1);
 		}else{
 			L = Math.max(0, alpha1 + alpha2 - C);
-			H = Math.max(C, alpha1 + alpha2);
+			H = Math.min(C, alpha1 + alpha2);
 		}
 		if (L >= H) {
 			return false;
@@ -146,7 +158,8 @@ public class MySMO {
 		}
 		
 		//通过a2来更新a1
-		a1 = alpha1 * s * (alpha2 - a2);
+		a1 = alpha1 + s * (alpha2 - a2);
+		
 		if (a1 < 0) {
 			a2 += s * a1;
 			a1 = 0;
@@ -159,14 +172,20 @@ public class MySMO {
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
-		if (0 < a1 && a1 < C) {
-			b = b1;
-		}else if (0 < a2 && a2 < C) {
-			b = b2;
-		}else {
-			b = (b1 + b2) / 2;
-		}
+		//the other way to update b
+//		double b1 = b + E1 + y1 * (a1 - alpha1) * k11 + y2 * (a2 - alpha2) * k12;
+//		double b2 = b + E2 + y1 * (a1 - alpha1) * k12 + y2 * (a2 - alpha2) * k22;
 		
+		double bNew = 0;
+		double deltaB = 0;
+		if (0 < a1 && a1 < C) {
+			bNew = b1;
+		}else if (0 < a2 && a2 < C) {
+			bNew = b2;
+		}else {
+			bNew = (b1 + b2) / 2;
+		}
+		deltaB = bNew - this.b; //b的增量
 		
 		//update error cache
 		double t1 = y1 * (a1 - alpha1);
@@ -175,20 +194,23 @@ public class MySMO {
 		//update error cache using new lagrange multipliers
 		for (int i = 0; i < N; i++) {
 			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
-				errorCache[i] += t1 * kernel(i1, i) + t2 * kernel(i2, i);
+				errorCache[i] += t1 * kernel(i1, i) + t2 * kernel(i2, i) - deltaB;
 			}
 		}
 		
-		//update error cache for i1 and i2
-		errorCache[i1] += t1 * k11 + t2 * k12;
-		errorCache[i2] += t1 * k12 + t2 * k22;
+//		//update error cache for i1 and i2
+//		errorCache[i1] += t1 * k11 + t2 * k12;
+//		errorCache[i2] += t1 * k12 + t2 * k22;
+		
+		errorCache[i1] = 0.0;
+		errorCache[i2] = 0.0;
 		
 		//store a1, a2 in alpha array
 		alpha[i1] = a1;
 		alpha[i2] = a2;
 		
 		
-		return false;
+		return true;
 	}
 	
 	/**
@@ -197,13 +219,18 @@ public class MySMO {
 	 * @return
 	 */
 	private boolean examineExample(int i1){
-		double y1 = target[i1];
-		double E1 = errorCache[i1];
+		double y1 = y[i1];
 		double alpha1 = alpha[i1];
+		double E1 = 0;
 		
-		double r2 = y1 * E1;
+		if (0 < alpha1 && alpha1 < C) {
+			E1 = errorCache[i1];
+		}else{
+			E1 = learnFunc(i1) - y1;
+		}
 		
-		if ((r2 < -tolerance && alpha1 < C) || (r2 > 0 && alpha1 > 0)) {
+		double r1 = y1 * E1;
+		if ((r1 < -tolerance && alpha1 < C) || (r1 > tolerance && alpha1 > 0)) {
 
 			//选择 E1 - E2 差最大的两点
 			int i2 = this.findMax(E1);
@@ -240,10 +267,14 @@ public class MySMO {
 	
 	
 	private void train(){
+		System.out.println("begin train");
+		
+		int maxIter = 50;
+		int iterCount = 0;
 		int numChanged = 0;
 		boolean examineAll = true;
 		
-		while(numChanged > 0 || examineAll){
+		while((iterCount < maxIter) && (numChanged > 0 || examineAll)){
 			numChanged = 0;
 			
 			if (examineAll) {
@@ -262,12 +293,15 @@ public class MySMO {
 				}
 			}
 			
+			iterCount ++;
 			if (examineAll) {
 				examineAll = false;
 			}else if (numChanged == 0) {
 				examineAll = true;
 			}
 		}
+		
+		System.out.println("end of train");
 	}
 	
 	
@@ -314,7 +348,7 @@ public class MySMO {
 	 */
 	private double kernel(int i1, int i2){
 		double result = 0.0;
-		result = Math.exp(-gamma * (dotDache[i1][i1]) + dotDache[i2][i2] - 2 * dotDache[i1][i2]);
+		result = Math.exp(-gamma * (dotDache[i1][i1] + dotDache[i2][i2] - 2 * dotDache[i1][i2]));
 		
 		return result;
 	}
@@ -348,19 +382,31 @@ public class MySMO {
 		return sum;
 	}
 	
+	/**
+	 * 学习函数u，算误差的时候要用
+	 * @param k
+	 * @return
+	 */
+	private double learnFunc(int k){
+		double sum = 0.0;
+		for (int i = 0; i < N; i++) {
+			sum += alpha[i]*y[i]*kernel(i, k);
+		}
+		sum += this.b;
+		return sum;
+	}
+	
 	public static void main(String[] args){
-		SvmNode[][] points = new SvmNode[2][];
-		SvmNode node00 = new SvmNode(1, 0.1);
-		SvmNode node01 = new SvmNode(2, 0.3);
-		SvmNode node10 = new SvmNode(1, 0.17);
-		SvmNode node11 = new SvmNode(1, 0.34);
-		points[0] = new SvmNode[]{ node00, node01};
-		points[1] = new SvmNode[]{ node10, node11};
-		int[] target = new int[]{1,2};
-		MySMO smo = new MySMO(points, target);
-		smo.init();		
 		
+		long start = System.currentTimeMillis();
 		
+		SvmData data = FileUtil.loadTrainFile("heart_scale");
+		MySMO smo = new MySMO(data.getX(), data.getY());
+		smo.train();
+		
+		long end = System.currentTimeMillis();
+		long delay = (end - start) / 1000;
+		System.out.println("耗时：" + delay + "s");
 	}
 	
 }
