@@ -2,6 +2,8 @@ package MySMO;
 
 import java.util.Random;
 
+import sun.security.pkcs11.Secmod.DbMode;
+
 public class MySMO {
 	
 	/**
@@ -198,12 +200,12 @@ public class MySMO {
 			}
 		}
 		
-//		//update error cache for i1 and i2
-//		errorCache[i1] += t1 * k11 + t2 * k12;
-//		errorCache[i2] += t1 * k12 + t2 * k22;
+		//update error cache for i1 and i2
+		errorCache[i1] += t1 * k11 + t2 * k12;
+		errorCache[i2] += t1 * k12 + t2 * k22;
 		
-		errorCache[i1] = 0.0;
-		errorCache[i2] = 0.0;
+//		errorCache[i1] = 0.0;
+//		errorCache[i2] = 0.0;
 		
 		//store a1, a2 in alpha array
 		alpha[i1] = a1;
@@ -269,7 +271,7 @@ public class MySMO {
 	private void train(){
 		System.out.println("begin train");
 		
-		int maxIter = 50;
+		int maxIter = 500;
 		int iterCount = 0;
 		int numChanged = 0;
 		boolean examineAll = true;
@@ -336,7 +338,7 @@ public class MySMO {
 		int i2 = 0;
 		do {
 			i2 = random.nextInt(N);
-		} while (i1 != i2);
+		} while (i1 == i2);
 		return i2;
 	}
 	
@@ -405,7 +407,7 @@ public class MySMO {
 		smo.train();
 		
 		long end = System.currentTimeMillis();
-		long delay = (end - start) / 1000;
+		double delay = (double)(end - start) / 1000.00;
 		System.out.println("耗时：" + delay + "s");
 	}
 	
