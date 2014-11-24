@@ -57,6 +57,8 @@ public class MySMO {
 	 */
 	private double[][] dotDache = null;
 	
+	private double[][] kernel = null;
+	
 	/**
 	 * 所有向量的数目
 	 */
@@ -71,6 +73,7 @@ public class MySMO {
 		this.alpha = new double[N];
 		this.errorCache = new double[N];
 		this.dotDache = new double[N][N];
+		this.kernel = new double[N][N];
 		this.random = new Random();
 		this.init();
 	}
@@ -82,6 +85,14 @@ public class MySMO {
 				this.dotDache[i][j] = dot(x[i], x[j]);
 			}
 		}
+		
+		//初始化核函数
+		for (int i = 0; i < N; i++) {
+			for (int j = 0; j < N; j++) {
+				this.kernel[i][j] = kernelFunction(i, j);
+			}
+		}
+
 	}
 	
 	private boolean takeStep(int i1, int i2){
@@ -122,9 +133,9 @@ public class MySMO {
 			return false;
 		}
 		
-		double k11 = kernel(i1, i1);
-		double k12 = kernel(i1, i2);
-		double k22 = kernel(i2, i2);
+		double k11 = kernel[i1][i1];
+		double k12 = kernel[i1][i2];
+		double k22 = kernel[i2][i2];
 		
 		double eta = 2 * k12 - k11 - k22;
 		//根据不同情况计算出a2
@@ -174,10 +185,6 @@ public class MySMO {
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
-		//the other way to update b
-//		double b1 = b + E1 + y1 * (a1 - alpha1) * k11 + y2 * (a2 - alpha2) * k12;
-//		double b2 = b + E2 + y1 * (a1 - alpha1) * k12 + y2 * (a2 - alpha2) * k22;
-		
 		double bNew = 0;
 		double deltaB = 0;
 		if (0 < a1 && a1 < C) {
@@ -188,24 +195,27 @@ public class MySMO {
 			bNew = (b1 + b2) / 2;
 		}
 		deltaB = bNew - this.b; //b的增量
+		this.b = bNew;
 		
 		//update error cache
 		double t1 = y1 * (a1 - alpha1);
 		double t2 = y2 * (a2 - alpha2);
 		
 		//update error cache using new lagrange multipliers
-		for (int i = 0; i < N; i++) {
-			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
-				errorCache[i] += t1 * kernel(i1, i) + t2 * kernel(i2, i) - deltaB;
-			}
-		}
-		
-		//update error cache for i1 and i2
-		errorCache[i1] += t1 * k11 + t2 * k12;
-		errorCache[i2] += t1 * k12 + t2 * k22;
+//		for (int i = 0; i < N; i++) {
+//			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
+//				errorCache[i] += t1 * kernel[i1][i] + t2 * kernel[i2][i] - deltaB;
+//			}
+//		}
+//		
+//		//update error cache for i1 and i2
+//		errorCache[i1] += t1 * k11 + t2 * k12;
+//		errorCache[i2] += t1 * k12 + t2 * k22;
 		
 //		errorCache[i1] = 0.0;
 //		errorCache[i2] = 0.0;
+		updateErrorCache(i1);
+		updateErrorCache(i2);
 		
 		//store a1, a2 in alpha array
 		alpha[i1] = a1;
@@ -271,7 +281,7 @@ public class MySMO {
 	private void train(){
 		System.out.println("begin train");
 		
-		int maxIter = 500;
+		int maxIter = 5000;
 		int iterCount = 0;
 		int numChanged = 0;
 		boolean examineAll = true;
@@ -306,6 +316,16 @@ public class MySMO {
 		System.out.println("end of train");
 	}
 	
+	
+	private double calcError(int k){
+		double result = learnFunc(k) - y[k];
+		return result;
+	}
+	
+	private void updateErrorCache(int k){
+		double error = learnFunc(k) - y[k];
+		this.errorCache[k] = error;
+	}
 	
 	/**
 	 * 找到|E1 - E2|差最大的点的下标
@@ -348,7 +368,7 @@ public class MySMO {
 	 * @param i2
 	 * @return
 	 */
-	private double kernel(int i1, int i2){
+	private double kernelFunction(int i1, int i2){
 		double result = 0.0;
 		result = Math.exp(-gamma * (dotDache[i1][i1] + dotDache[i2][i2] - 2 * dotDache[i1][i2]));
 		
@@ -392,7 +412,7 @@ public class MySMO {
 	private double learnFunc(int k){
 		double sum = 0.0;
 		for (int i = 0; i < N; i++) {
-			sum += alpha[i]*y[i]*kernel(i, k);
+			sum += alpha[i]*y[i]*kernel[i][k];
 		}
 		sum += this.b;
 		return sum;
