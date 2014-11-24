@@ -142,34 +142,6 @@ public class MySMO {
 			a2 = H;
 		}
 		
-		//根据不同情况计算出a2
-//		if (eta < 0) {
-//			//计算非约束条件下的最大值
-//			a2 = alpha2 - y2 * (E1 - E2) / eta;
-//			
-//			//判断约束的条件
-//			if (a2 < L) {
-//				a2 = L;
-//			} else if (a2 > H) {
-//				a2 = H;
-//			}
-//		}else {
-//			double C1 = eta / 2;
-//			double C2 = y2 * (E1 - E2) - eta * alpha2; 
-//			
-//			//Lobj和Hobj可以根据自己的爱好选择不同的函数
-//			double Lobj = C1 * L * L + C2 * L;
-//			double Hobj = C1 * H * H + C2 * H;
-//			
-//			if (Lobj > Hobj + eps) {
-//				a2 = L;
-//			}else if (Lobj < Hobj - eps) {
-//				a2 = H;
-//			} else {
-//				a2 = alpha2;
-//			}
-//		}
-		
 		if (Math.abs(a2 - alpha2) < eps * (a2 + alpha2 + eps)) {
 			updateErrorCache(i2);
 			return false;
@@ -177,14 +149,6 @@ public class MySMO {
 		
 		//通过a2来更新a1
 		a1 = alpha1 + s * (alpha2 - a2);
-		
-//		if (a1 < 0) {
-//			a2 += s * a1;
-//			a1 = 0;
-//		}else if (a1 > C) {
-//			a2 += s * (a1 - C);
-//			a1 = C;
-//		}
 		
 		//update threshold b;
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
@@ -230,30 +194,12 @@ public class MySMO {
 
 			//选择 E1 - E2 差最大的两点
 			int i2 = this.findMax(E1);
-			if (i2 >= 0) {
-				if (takeStep(i1, i2)) {
-					return true;
-				}
+			if (i2 < 0) {
+				i2 = randomSelect(i1);
 			}
 			
-			//先选择 0 < alpha < C的点
-			int k0 = randomSelect(i1);
-			for (int k = k0; k < N + k0; k++) {
-				i2 = k % N;
-				if (0 < alpha[i2] && alpha[i2] < C) {
-					if (takeStep(i1, i2)) {
-						return true;
-					}
-				}
-			}
-			
-			//如果不符合，再遍历全部点
-			k0 = randomSelect(i1);
-			for (int k = k0; k < N + k0; k++) {
-				i2 = k % N;
-				if (takeStep(i1, i2)) {
-					return true;
-				}
+			if (takeStep(i1, i2)) {
+				return true;
 			}
 			
 		}
@@ -311,7 +257,7 @@ public class MySMO {
 	}
 	
 	/**
-	 * 找到|E1 - E2|差最大的点的下标
+	 * 找到边界上的|E1 - E2|差最大的点的下标
 	 * @param E1
 	 * @return
 	 */
@@ -319,6 +265,7 @@ public class MySMO {
 		int i2 = -1;
 		double tmax = 0.0;
 		for (int k = 0; k < N; k++) {
+			//限制边界条件
 			if (0 < alpha[k] && alpha[k] < C) {
 				double E2 = errorCache[k];
 				double tmp = Math.abs(E2 - E1);
@@ -341,7 +288,7 @@ public class MySMO {
 		int i2 = 0;
 		do {
 			i2 = random.nextInt(N);
-		} while (i1 != i2);
+		} while (i1 == i2);
 		return i2;
 	}
 	
@@ -410,7 +357,7 @@ public class MySMO {
 		smo.train();
 		
 		long end = System.currentTimeMillis();
-		long delay = (end - start) / 1000;
+		double delay = (double)(end - start) / 1000.00;
 		System.out.println("耗时：" + delay + "s");
 	}
 	
