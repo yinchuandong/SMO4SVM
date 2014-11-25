@@ -2,8 +2,6 @@ package MySMO;
 
 import java.util.Random;
 
-import sun.security.pkcs11.Secmod.DbMode;
-
 public class MySMO {
 	
 	/**
@@ -48,9 +46,9 @@ public class MySMO {
 	private double b = 0.0;
 	
 	/**
-	 * rbf kernel for exp(-gamma*|u-v|^2), 默认为0.5，也可设为1/num
+	 * rbf kernel for exp(-gamma*|u-v|^2), 默认为0.1，也可设为1/num
 	 */
-	private double gamma = 0.01;
+	private double gamma = 0.08;
 	
 	/**
 	 * 对points点积的缓存
@@ -75,6 +73,7 @@ public class MySMO {
 		this.dotDache = new double[N][N];
 		this.kernel = new double[N][N];
 		this.random = new Random();
+		System.out.println("gamma:" + gamma);
 		this.init();
 	}
 	
@@ -198,10 +197,10 @@ public class MySMO {
 		this.b = bNew;
 		
 		//update error cache
-		double t1 = y1 * (a1 - alpha1);
-		double t2 = y2 * (a2 - alpha2);
-		
-		//update error cache using new lagrange multipliers
+//		double t1 = y1 * (a1 - alpha1);
+//		double t2 = y2 * (a2 - alpha2);
+//		
+//		//update error cache using new lagrange multipliers
 //		for (int i = 0; i < N; i++) {
 //			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
 //				errorCache[i] += t1 * kernel[i1][i] + t2 * kernel[i2][i] - deltaB;
@@ -320,11 +319,6 @@ public class MySMO {
 		return new SvmModel(alpha, y, b);
 	}
 	
-	
-	private double calcError(int k){
-		double result = learnFunc(k) - y[k];
-		return result;
-	}
 	
 	private void updateErrorCache(int k){
 		double error = learnFunc(k) - y[k];
