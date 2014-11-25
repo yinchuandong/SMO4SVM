@@ -110,9 +110,17 @@ public class MySMO {
 		double a1, a2; //新的a
 		double L, H;
 		
+		if (0 < alpha1 && alpha1 < C) {
+			E1 = errorCache[i1];
+		}else{
+			E1 = learnFunc(i1) - y1;
+		}
 		
-		E1 = calcError(i1);
-		E2 = errorCache[i2];
+		if (0 < alpha2 && alpha2 < C) {
+			E2 = errorCache[i2];
+		}else{
+			E2 = learnFunc(i2) - y2;
+		}
 		
 		if (y1 != y2) {
 			L = Math.max(0, alpha2 - alpha1);
@@ -130,35 +138,55 @@ public class MySMO {
 		double k22 = kernel[i2][i2];
 		
 		double eta = 2 * k12 - k11 - k22;
-		if (eta >=0) {
-			return false;
-		}
-		
-		//计算非约束条件下的最大值
-		a2 = alpha2 - y2 * (E1 - E2) / eta;
-		
-				
-		//判断约束的条件
-		if (a2 < L) {
-			a2 = L;
-		} else if (a2 > H) {
-			a2 = H;
+		//根据不同情况计算出a2
+		if (eta < 0) {
+			//计算非约束条件下的最大值
+			a2 = alpha2 - y2 * (E1 - E2) / eta;
+			
+			//判断约束的条件
+			if (a2 < L) {
+				a2 = L;
+			} else if (a2 > H) {
+				a2 = H;
+			}
+		}else {
+			double C1 = eta / 2;
+			double C2 = y2 * (E1 - E2) - eta * alpha2; 
+			
+			//Lobj和Hobj可以根据自己的爱好选择不同的函数
+			double Lobj = C1 * L * L + C2 * L;
+			double Hobj = C1 * H * H + C2 * H;
+			
+			if (Lobj > Hobj + eps) {
+				a2 = L;
+			}else if (Lobj < Hobj - eps) {
+				a2 = H;
+			} else {
+				a2 = alpha2;
+			}
 		}
 		
 		if (Math.abs(a2 - alpha2) < eps * (a2 + alpha2 + eps)) {
-			updateErrorCache(i2);
 			return false;
 		}
 		
 		//通过a2来更新a1
 		a1 = alpha1 + s * (alpha2 - a2);
 		
+		if (a1 < 0) {
+			a2 += s * a1;
+			a1 = 0;
+		}else if (a1 > C) {
+			a2 += s * (a1 - C);
+			a1 = C;
+		}
+		
 		//update threshold b;
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
-		double deltaB = 0.0;
 		double bNew = 0;
+		double deltaB = 0;
 		if (0 < a1 && a1 < C) {
 			bNew = b1;
 		}else if (0 < a2 && a2 < C) {
@@ -209,20 +237,41 @@ public class MySMO {
 		double alpha1 = alpha[i1];
 		double E1 = 0;
 		
-		E1 = learnFunc(i1) - y1;
-		errorCache[i1] = E1;
+		if (0 < alpha1 && alpha1 < C) {
+			E1 = errorCache[i1];
+		}else{
+			E1 = learnFunc(i1) - y1;
+		}
 		
 		double r1 = y1 * E1;
 		if ((r1 < -tolerance && alpha1 < C) || (r1 > tolerance && alpha1 > 0)) {
 
 			//选择 E1 - E2 差最大的两点
 			int i2 = this.findMax(E1);
-			if (i2 < 0) {
-				i2 = randomSelect(i1);
+			if (i2 >= 0) {
+				if (takeStep(i1, i2)) {
+					return true;
+				}
 			}
 			
-			if (takeStep(i1, i2)) {
-				return true;
+			//先选择 0 < alpha < C的点
+			int k0 = randomSelect(i1);
+			for (int k = k0; k < N + k0; k++) {
+				i2 = k % N;
+				if (0 < alpha[i2] && alpha[i2] < C) {
+					if (takeStep(i1, i2)) {
+						return true;
+					}
+				}
+			}
+			
+			//如果不符合，再遍历全部点
+			k0 = randomSelect(i1);
+			for (int k = k0; k < N + k0; k++) {
+				i2 = k % N;
+				if (takeStep(i1, i2)) {
+					return true;
+				}
 			}
 			
 		}
@@ -283,7 +332,7 @@ public class MySMO {
 	}
 	
 	/**
-	 * 找到边界上的|E1 - E2|差最大的点的下标
+	 * 找到|E1 - E2|差最大的点的下标
 	 * @param E1
 	 * @return
 	 */
@@ -291,7 +340,6 @@ public class MySMO {
 		int i2 = -1;
 		double tmax = 0.0;
 		for (int k = 0; k < N; k++) {
-			//限制边界条件
 			if (0 < alpha[k] && alpha[k] < C) {
 				double E2 = errorCache[k];
 				double tmp = Math.abs(E2 - E1);
