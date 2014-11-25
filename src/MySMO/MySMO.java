@@ -2,6 +2,8 @@ package MySMO;
 
 import java.util.Random;
 
+import sun.security.pkcs11.Secmod.DbMode;
+
 public class MySMO {
 	
 	/**
@@ -48,7 +50,7 @@ public class MySMO {
 	/**
 	 * rbf kernel for exp(-gamma*|u-v|^2), 默认为0.5，也可设为1/num
 	 */
-	private double gamma = 0.5;
+	private double gamma = 0.01;
 	
 	/**
 	 * 对points点积的缓存
@@ -84,12 +86,13 @@ public class MySMO {
 			}
 		}
 		
-		//初始化kernel
+		//初始化核函数
 		for (int i = 0; i < N; i++) {
 			for (int j = 0; j < N; j++) {
 				this.kernel[i][j] = kernelFunction(i, j);
 			}
 		}
+
 	}
 	
 	private boolean takeStep(int i1, int i2){
@@ -154,15 +157,35 @@ public class MySMO {
 		double b1 = b - E1 - y1 * (a1 - alpha1) * k11 - y2 * (a2 - alpha2) * k12;
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
+		double deltaB = 0.0;
 		double bNew = 0;
 		if (0 < a1 && a1 < C) {
 			bNew = b1;
 		}else if (0 < a2 && a2 < C) {
 			bNew = b2;
 		}else {
-			bNew = (b1 + b2) / 2.0;
+			bNew = (b1 + b2) / 2;
 		}
+		deltaB = bNew - this.b; //b的增量
 		this.b = bNew;
+		
+		//update error cache
+		double t1 = y1 * (a1 - alpha1);
+		double t2 = y2 * (a2 - alpha2);
+		
+		//update error cache using new lagrange multipliers
+//		for (int i = 0; i < N; i++) {
+//			if (0 < alpha[i] && alpha[i] < C) { // condition in i != i1 && i != i2
+//				errorCache[i] += t1 * kernel[i1][i] + t2 * kernel[i2][i] - deltaB;
+//			}
+//		}
+		
+		//update error cache for i1 and i2
+//		errorCache[i1] += t1 * k11 + t2 * k12;
+//		errorCache[i2] += t1 * k12 + t2 * k22;
+		
+//		errorCache[i1] = 0.0;
+//		errorCache[i2] = 0.0;
 		
 		
 		updateErrorCache(i1);
@@ -208,10 +231,10 @@ public class MySMO {
 	}
 	
 	
-	private void train(){
+	public SvmModel train(){
 		System.out.println("begin train");
 		
-		int maxIter = 10000000;
+		int maxIter = 5000;
 		int iterCount = 0;
 		int numChanged = 0;
 		boolean examineAll = true;
@@ -244,7 +267,10 @@ public class MySMO {
 		}
 		
 		System.out.println("end of train");
+		
+		return new SvmModel(alpha, y, b);
 	}
+	
 	
 	private double calcError(int k){
 		double result = learnFunc(k) - y[k];
@@ -293,7 +319,7 @@ public class MySMO {
 	}
 	
 	/**
-	 * 核函数 exp(-gamma*|u-v|^2)
+	 * 训练时的核函数 exp(-gamma*|u-v|^2)
 	 * @param i1
 	 * @param i2
 	 * @return
@@ -301,8 +327,56 @@ public class MySMO {
 	private double kernelFunction(int i1, int i2){
 		double result = 0.0;
 		result = Math.exp(-gamma * (dotDache[i1][i1] + dotDache[i2][i2] - 2 * dotDache[i1][i2]));
-		
 		return result;
+	}
+	
+	/**
+	 * 预测时的核函数，注意和训练时不一样
+	 * @param x
+	 * @param y
+	 * @param gamma 高斯核前面的系数, 建议给0.5
+	 * @return
+	 */
+	private static double kFunction(SvmNode[] x, SvmNode[] y, double gamma){
+		double sum = 0.0;
+		
+		int xLen = x.length;
+		int yLen = y.length;
+		int i = 0;
+		int j = 0;
+		
+		while(i < xLen && j < yLen){
+			int xId = x[i].getIndex();
+			double xVal = x[i].getValue();
+			
+			int yId = y[j].getIndex();
+			double yVal = y[j].getValue();
+			
+			if (xId == yId) {
+				double d = xVal - yVal;
+				sum += d * d;
+				i++;
+				j++;
+			}else if (xId > yId) {
+				sum += yVal * yVal;
+				j++;
+			}else{
+				sum += xVal * xVal;
+				i++;
+			}
+		}
+		
+		while(i < xLen){
+			sum += x[i].getValue() * x[i].getValue();
+			i++;
+		}
+		
+		while(j < yLen){
+			sum += y[j].getValue() * y[j].getValue();
+			j++;
+		}
+		
+		return Math.exp(-gamma * sum);
 	}
 	
 	/**
@@ -348,13 +422,52 @@ public class MySMO {
 		return sum;
 	}
 	
+	/**
+	 * 预测函数
+	 * @param model
+	 * @param x
+	 * @param y
+	 * @return
+	 */
+	public double predict(SvmModel model, SvmNode[][] x, int[] y){
+		double probability = 0.0;
+		int correctCount = 0;
+		int total = y.length;
+		for (int i = 0; i < total; i++) {
+			double sum = 0.0;
+			int len = model.getY().length;
+			for (int j = 0; j < len; j++) {
+				sum += model.getAlpha()[j] * model.getY()[j] * kFunction(x[j], x[i], this.gamma);
+//				sum += model.getAlpha()[j] * model.getY()[j] * kernelFunction(i, j);
+			}
+			sum += model.getB();
+			
+			if ((sum > 0 && y[i] > 0) || (sum < 0 && y[i] < 0)) {
+				correctCount ++;
+			}
+		}
+		
+		probability = (double)correctCount / (double)total;
+		
+		return probability;
+	}
+	
 	public static void main(String[] args){
 		
 		long start = System.currentTimeMillis();
 		
 		SvmData data = FileUtil.loadTrainFile("heart_scale");
 		MySMO smo = new MySMO(data.getX(), data.getY());
-		smo.train();
+		SvmModel model = smo.train();
+		
+		System.out.println("训练结束，开始预测....");
+		
+		SvmNode[][] x = data.getX();
+		int[] y = data.getY();
+		
+		double probability = smo.predict(model, x, y);
+		
+		System.out.println("正确率：" + probability);
 		
 		long end = System.currentTimeMillis();
 		double delay = (double)(end - start) / 1000.00;
