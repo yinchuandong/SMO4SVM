@@ -94,6 +94,12 @@ public class MySMO {
 
 	}
 	
+	/**
+	 * 内循环，选择最大步长的两个点进行优化
+	 * @param i1
+	 * @param i2
+	 * @return
+	 */
 	private boolean takeStep(int i1, int i2){
 		if (i1 == i2) {
 			return false;
@@ -112,13 +118,13 @@ public class MySMO {
 		if (0 < alpha1 && alpha1 < C) {
 			E1 = errorCache[i1];
 		}else{
-			E1 = learnFunc(i1) - y1;
+			E1 = calcError(i1);
 		}
 		
 		if (0 < alpha2 && alpha2 < C) {
 			E2 = errorCache[i2];
 		}else{
-			E2 = learnFunc(i2) - y2;
+			E2 = calcError(i2);
 		}
 		
 		if (y1 != y2) {
@@ -185,7 +191,7 @@ public class MySMO {
 		double b2 = b - E2 - y1 * (a1 - alpha1) * k12 - y2 * (a2 - alpha2) * k22;
 		
 		double bNew = 0;
-		double deltaB = 0;
+//		double deltaB = 0;
 		if (0 < a1 && a1 < C) {
 			bNew = b1;
 		}else if (0 < a2 && a2 < C) {
@@ -193,7 +199,7 @@ public class MySMO {
 		}else {
 			bNew = (b1 + b2) / 2;
 		}
-		deltaB = bNew - this.b; //b的增量
+//		deltaB = bNew - this.b; //b的增量
 		this.b = bNew;
 		
 		//update error cache
@@ -227,7 +233,7 @@ public class MySMO {
 	}
 	
 	/**
-	 * 检查最好的样本，并进行takeStep计算
+	 * 外循环，检查最好的样本，并进行takeStep计算
 	 * @param i1
 	 * @return
 	 */
@@ -239,7 +245,7 @@ public class MySMO {
 		if (0 < alpha1 && alpha1 < C) {
 			E1 = errorCache[i1];
 		}else{
-			E1 = learnFunc(i1) - y1;
+			E1 = calcError(i1);
 		}
 		
 		double r1 = y1 * E1;
@@ -319,9 +325,22 @@ public class MySMO {
 		return new SvmModel(alpha, y, b);
 	}
 	
+	/**
+	 * 计算误差公式： error = ∑a[i]*y[i]*k(x,x[i]) - y[i]
+	 * @param k
+	 * @return
+	 */
+	private double calcError(int k){
+		double error = learnFunc(k) - this.y[k];
+		return error;
+	}
 	
+	/**
+	 * 更新误差，重新计算给定点的误差，并保存到errorCache中
+	 * @param k
+	 */
 	private void updateErrorCache(int k){
-		double error = learnFunc(k) - y[k];
+		double error = calcError(k);
 		this.errorCache[k] = error;
 	}
 	
