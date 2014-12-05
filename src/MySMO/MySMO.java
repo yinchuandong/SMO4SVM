@@ -516,6 +516,20 @@ public class MySMO {
 		return probability;
 	}
 	
+	/**
+	 * 计算支持向量的个数
+	 */
+	public void countSupportVector(){
+		int count = 0;
+		for (int i = 0; i < alpha.length; i++) {
+			if(alpha[i] != 0){
+				count ++;
+			}
+		}
+		
+		System.out.println("Support Vector nums: " + count + "/" + alpha.length);
+	}
+	
 	public static void main(String[] args){
 		
 		long start = System.currentTimeMillis();
@@ -530,8 +544,9 @@ public class MySMO {
 		int[] y = data.getY();
 		
 		double probability = smo.predict(model, x, y);
-		
 		System.out.println("正确率：" + probability);
+		
+		smo.countSupportVector();
 		
 		long end = System.currentTimeMillis();
 		double delay = (double)(end - start) / 1000.00;
