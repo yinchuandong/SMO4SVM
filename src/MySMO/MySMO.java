@@ -252,7 +252,7 @@ public class MySMO {
 		if ((r1 < -tolerance && alpha1 < C) || (r1 > tolerance && alpha1 > 0)) {
 
 			//选择 E1 - E2 差最大的两点
-			int i2 = this.findMax(E1);
+			int i2 = this.selectMaxJ(E1);
 			if (i2 >= 0) {
 				if (takeStep(i1, i2)) {
 					return true;
@@ -293,16 +293,19 @@ public class MySMO {
 		int numChanged = 0;
 		boolean examineAll = true;
 		
+		//当迭代次数大于maxIter或者 所有样本中没有alpha对改变时，跳出循环
 		while((iterCount < maxIter) && (numChanged > 0 || examineAll)){
 			numChanged = 0;
 			
 			if (examineAll) {
+				//循环检查所有样本
 				for (int i = 0; i < N; i++) {
 					if (examineExample(i)) {
 						numChanged ++;
 					}
 				}
 			}else{
+				//只检查非边界样本
 				for (int i = 0; i < N; i++) {
 					if (alpha[i] != 0 && alpha[i] != C) {
 						if (examineExample(i)) {
@@ -349,7 +352,7 @@ public class MySMO {
 	 * @param E1
 	 * @return
 	 */
-	private int findMax(double E1){
+	private int selectMaxJ(double E1){
 		int i2 = -1;
 		double tmax = 0.0;
 		for (int k = 0; k < N; k++) {
